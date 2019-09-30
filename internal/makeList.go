@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 
 	"golang.org/x/net/context"
@@ -14,6 +15,21 @@ import (
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/sheets/v4"
 )
+
+//QuantitySep denotes separation between measurement quant. and type
+const QuantitySep string = "/"
+
+//MeasurementSep denotes the end of ingredient and start of measurement
+const MeasurementSep string = ";"
+
+//IngredientSep denotes the end of ingredient and start of measurement
+const IngredientSep string = ","
+
+// Ingredients name of ingredients column
+const Ingredients string = "Ingredients"
+
+// IDprefix ID- which predeces every ID number
+const IDprefix string = "ID-"
 
 // IDsep is what separates id values
 const IDsep string = "-"
@@ -79,7 +95,139 @@ func saveToken(path string, token *oauth2.Token) {
 	json.NewEncoder(f).Encode(token)
 }
 
-func getHeaders(respValues [][]interface{}) *map[string]map[string][2]int {
+type unitConversions struct {
+	Tsp  map[string]float64 `json:"tsp"`
+	Tbsp map[string]float64 `json:"tbsp"`
+	Lb   map[string]float64 `json:"lb"`
+	Oz   map[string]float64 `json:"oz"`
+	Floz map[string]float64 `json:"floz"`
+	Cups map[string]float64 `json:"cups"`
+}
+
+func loadUnitConversions() *unitConversions {
+	f, err := os.Open("/internal/measurements.json")
+	if err != nil {
+		log.Fatalf("Unable to open measurements.json file.")
+	}
+
+	defer f.Close()
+
+	unitConversions := &unitConversions{}
+	err = json.NewEncoder(f).Encode(unitConversions)
+	if err != nil {
+		log.Fatalf("Unable to enconde measurements.json file into struct.")
+	}
+	return unitConversions
+}
+
+func convertUnit(fromQuant string, fromUnit string, toUnit string, units *unitConversions) float64 {
+
+	var newQuant float64
+	floatQuant, _ := strconv.ParseFloat(fromQuant, 32)
+
+	switch fromUnit {
+	case "tsp":
+		if _, ok := units.Tsp[toUnit]; !ok {
+			log.Fatalf("Unit conversion not found from " + fromUnit + " to " + toUnit)
+		}
+		newQuant = floatQuant * units.Tsp[toUnit]
+	case "tbsp":
+		if _, ok := units.Tbsp[toUnit]; !ok {
+			log.Fatalf("Unit conversion not found from " + fromUnit + " to " + toUnit)
+		}
+		newQuant = floatQuant * units.Tbsp[toUnit]
+	case "lb":
+		if _, ok := units.Lb[toUnit]; !ok {
+			log.Fatalf("Unit conversion not found from " + fromUnit + " to " + toUnit)
+		}
+		newQuant = floatQuant * units.Lb[toUnit]
+	case "oz":
+		if _, ok := units.Oz[toUnit]; !ok {
+			log.Fatalf("Unit conversion not found from " + fromUnit + " to " + toUnit)
+		}
+		newQuant = floatQuant * units.Oz[toUnit]
+	case "floz":
+		if _, ok := units.Floz[toUnit]; !ok {
+			log.Fatalf("Unit conversion not found from " + fromUnit + " to " + toUnit)
+		}
+		newQuant = floatQuant * units.Floz[toUnit]
+	case "cups":
+		if _, ok := units.Cups[toUnit]; !ok {
+			log.Fatalf("Unit conversion not found from " + fromUnit + " to " + toUnit)
+		}
+		newQuant = floatQuant * units.Cups[toUnit]
+	default:
+		log.Fatalf("From unit: " + fromUnit + " is not currently supported.")
+	}
+
+	return newQuant
+
+}
+
+func addIngredientsToList(ingredients []string, units *unitConversions, groceryMap map[string][]string) {
+
+	// ["Onion;1/cup(s)"]
+
+	for _, ingredient := range ingredients {
+		newIngredientTokens := strings.Split(ingredient, MeasurementSep)
+		// ["Onion", "1/cup(s)"]
+		newIngredientName := newIngredientTokens[0]
+		// "Onion"
+		newIngredientMeasurment := newIngredientTokens[1]
+		// "1/cups"
+		newMeasurementTokens := strings.Split(newIngredientMeasurment, QuantitySep)
+		// ["1", "cups"]
+		fromQuant := newMeasurementTokens[0]
+		// "1"
+		fromUnit := newMeasurementTokens[1]
+		// "cups"
+
+		// Okay, so now need to figure out how to do unit conversion if needed
+		// 1: Check if the ingredient is already in groveryMap. It is.
+		existingIngredient, ok := groceryMap[newIngredientName]
+		if ok {
+			//Get the unit of the existing ingredient.
+			toUnit := existingIngredient[1]
+			//Convert the new ingredient into the unit of existing ingredient
+			convFromQuant := convertUnit(fromQuant, fromUnit, toUnit, units)
+			// Convert existing ingredient amount to float
+			toQuant, _ := strconv.ParseFloat(groceryMap[newIngredientName][1], 64)
+			// Add existing ingredient amount to new amount, and convert to str.
+			newQuant := strconv.FormatFloat(convFromQuant+toQuant, 'e', 2, 64)
+			// Add new ingredient quantity to existing ingredient in list
+			groceryMap[newIngredientName][1] = newQuant
+
+		} else { // 2: Check if the ingredient is already in groceryMap. It is not.
+			//		- Add the ingredient to the map
+			//		- Add the amount and the unit
+			//		- Done
+
+		}
+	}
+}
+
+func getIngredients(respValues [][]interface{}, recipeID string, headersMap map[string]map[string][2]int) []string {
+
+	var ingredients string
+	var category string
+	var coords [2]int
+
+	category = strings.Split(recipeID, IDsep)[1]
+	recipeNum, _ := strconv.Atoi(strings.Split(recipeID, IDsep)[0])
+
+	coords = headersMap[category][Ingredients]
+	coords[0] = coords[0] + recipeNum
+
+	ingredients = respValues[coords[0]][coords[1]].(string)
+
+	return strings.Split(ingredients, IngredientSep)
+}
+
+func addRecipeToList(respValues [][]interface{}, recipeMap map[string]string, recipeID string) {
+
+}
+
+func getHeaders(respValues [][]interface{}) map[string]map[string][2]int {
 
 	var coords [2]int
 	var key string
@@ -87,7 +235,6 @@ func getHeaders(respValues [][]interface{}) *map[string]map[string][2]int {
 	headersMap := make(map[string]map[string][2]int)
 
 	for i, row := range respValues {
-
 		if len(row) > 0 {
 			rowStr := row[0].(string)
 			if rowStr == CategorySep {
@@ -109,7 +256,7 @@ func getHeaders(respValues [][]interface{}) *map[string]map[string][2]int {
 		}
 	}
 
-	return &headersMap
+	return headersMap
 }
 
 func main() {
@@ -143,7 +290,7 @@ func main() {
 
 	// need to identify indices of headers
 
-	headersMap := *getHeaders(resp.Values)
+	headersMap := getHeaders(resp.Values)
 	fmt.Println(headersMap)
 
 	// if len(resp.Values) == 0 {
