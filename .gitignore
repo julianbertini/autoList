@@ -1,5 +1,6 @@
 ### Includes API tokens and secrets
-/configs
+/configs/credentials.json
+/configs/token.json
 
 ### VSCode configs file
 .vscode
