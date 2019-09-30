@@ -7,7 +7,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 
 	"golang.org/x/net/context"
@@ -16,14 +15,20 @@ import (
 	"google.golang.org/api/sheets/v4"
 )
 
-// HEADER is a constant
-const HEADER string = "#"
+// IDsep is what separates id values
+const IDsep string = "-"
+
+// CategorySep delineates betweeen categories
+const CategorySep string = "###"
 
 // Retrieve a token, saves the token, then returns the generated client.
 func getClient(config *oauth2.Config) *http.Client {
 	// The file token.json stores the user's access and refresh tokens, and is
 	// created automatically when the authorization flow completes for the first
 	// time.
+
+	// DEBUGGING file path
+	// tokFile := "../configs/token.json"
 	tokFile := "configs/token.json"
 	tok, err := tokenFromFile(tokFile)
 	if err != nil {
@@ -74,28 +79,31 @@ func saveToken(path string, token *oauth2.Token) {
 	json.NewEncoder(f).Encode(token)
 }
 
-func getHeaders(respValues [][]interface{}) *map[string][2]int {
+func getHeaders(respValues [][]interface{}) *map[string]map[string][2]int {
 
 	var coords [2]int
-	var category int = 1
-	var str strings.Builder
-	headersMap := make(map[string][2]int)
+	var key string
+	var valueStr string
+	headersMap := make(map[string]map[string][2]int)
 
 	for i, row := range respValues {
 
 		if len(row) > 0 {
-			if strings.Contains(row[0].(string), HEADER) {
+			rowStr := row[0].(string)
+			if rowStr == CategorySep {
 				for col, value := range row {
-					fmt.Println(value)
-					if strings.Contains(value.(string), "!") {
-						category++
+					valueStr = value.(string)
+
+					if valueStr == CategorySep {
+						valueStr = row[col+1].(string)
+						key = strings.Split(valueStr, IDsep)[1]
+						headers := make(map[string][2]int)
+						headersMap[key] = headers
 					} else {
-						str.WriteString(value.(string))
-						str.WriteString(strconv.Itoa(category))
+						coords[0] = i
+						coords[1] = col
+						headersMap[key][valueStr] = coords
 					}
-					coords[0] = i
-					coords[1] = col
-					headersMap[value.(string)] = coords
 				}
 			}
 		}
@@ -105,6 +113,9 @@ func getHeaders(respValues [][]interface{}) *map[string][2]int {
 }
 
 func main() {
+
+	// DEBUGGING file path
+	// b, err := ioutil.ReadFile("../configs/credentials.json")
 	b, err := ioutil.ReadFile("configs/credentials.json")
 	if err != nil {
 		log.Fatalf("Unable to read client secret file: %v", err)
@@ -123,7 +134,7 @@ func main() {
 	}
 
 	spreadsheetID := "1sLGhnXgDLig0HTJE4_uQ6OXXc4iQO4U5QdqWGfyyBck"
-	readRange := "Recipes!A:I"
+	readRange := "Recipes!A:Z"
 	resp, err := srv.Spreadsheets.Values.Get(spreadsheetID, readRange).Do()
 
 	if err != nil {

@@ -1,2 +1,1 @@
-// Here will go a simple main function that invokes libraries mostly from
-// the internal library 
+// will eventually be simple main function that calls everything else
