@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"math"
 	"net/http"
 	"os"
 	"strconv"
@@ -44,8 +45,8 @@ func getClient(config *oauth2.Config) *http.Client {
 	// time.
 
 	// DEBUGGING file path
-	tokFile := "../configs/token.json"
-	// tokFile := "configs/token.json"
+	// tokFile := "../configs/token.json"
+	tokFile := "configs/token.json"
 	tok, err := tokenFromFile(tokFile)
 	if err != nil {
 		tok = getTokenFromWeb(config)
@@ -95,6 +96,36 @@ func saveToken(path string, token *oauth2.Token) {
 	json.NewEncoder(f).Encode(token)
 }
 
+func writeHeader(f *os.File) {
+	header := "===============================\n"
+	header += "\tGrocery List\n"
+	header += "===============================\n"
+	f.WriteString(header)
+}
+
+func saveListToFile(path string, groceryMap map[string][]string) {
+	fmt.Printf("Saving grocery list to file: %s\n", path)
+	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
+	if err != nil {
+		log.Fatalf("Unable to open or create file to save grocery list: %v", err)
+	}
+
+	defer f.Close()
+
+	writeHeader(f)
+	// Here we write contents of groceryMap
+	for ingredient, measurement := range groceryMap {
+		amount := strings.TrimSpace(measurement[0])
+		unit := strings.TrimSpace(measurement[1])
+		ingredientLine := " # " + strings.TrimSpace(ingredient) + " --> " + "[" + amount + " " + unit + "]" + "\n"
+		_, err = f.WriteString(ingredientLine)
+		if err != nil {
+			log.Fatalf("Error writing ingredients to .txt file: %v", err)
+		}
+	}
+	fmt.Printf("Done!\n")
+}
+
 type unitConversions struct {
 	Tsp  map[string]float64 `json:"tsp"`
 	Tbsp map[string]float64 `json:"tbsp"`
@@ -106,8 +137,8 @@ type unitConversions struct {
 
 func loadUnitConversions() *unitConversions {
 	// DEBUGGING
-	f, err := os.Open("../configs/measurements.json")
-	// f, err := os.Open("/configs/measurements.json")
+	// f, err := os.Open("../configs/measurements.json")
+	f, err := os.Open("configs/measurements.json")
 	if err != nil {
 		log.Fatalf("Unable to open measurements.json file. Error: %v", err)
 	}
@@ -201,7 +232,7 @@ func addIngredientsToList(ingredients []string, units *unitConversions, groceryM
 			// Convert existing ingredient amount to float
 			toQuant, _ := strconv.ParseFloat(groceryMap[newIngredientName][0], 64)
 			// Add existing ingredient amount to new amount, and convert to str.
-			newQuant := strconv.FormatFloat(fromQuantFloat+toQuant, 'f', 2, 64)
+			newQuant := strconv.FormatInt(int64(math.Round(fromQuantFloat+toQuant)), 10)
 			// Add new ingredient quantity to existing ingredient in list
 			groceryMap[newIngredientName][0] = newQuant
 
@@ -228,10 +259,6 @@ func getIngredients(respValues [][]interface{}, recipeID string, headersMap map[
 	ingredients = respValues[coords[0]][coords[1]].(string)
 
 	return strings.Split(ingredients, IngredientSep)
-}
-
-func addRecipeToList(respValues [][]interface{}, recipeMap map[string]string, recipeID string) {
-
 }
 
 func getHeaders(respValues [][]interface{}) map[string]map[string][2]int {
@@ -269,8 +296,8 @@ func getHeaders(respValues [][]interface{}) map[string]map[string][2]int {
 func main() {
 
 	// DEBUGGING file path
-	b, err := ioutil.ReadFile("../configs/credentials.json")
-	// b, err := ioutil.ReadFile("configs/credentials.json")
+	// b, err := ioutil.ReadFile("../configs/credentials.json")
+	b, err := ioutil.ReadFile("configs/credentials.json")
 	if err != nil {
 		log.Fatalf("Unable to read client secret file: %v", err)
 	}
@@ -305,15 +332,7 @@ func main() {
 	units := loadUnitConversions()
 
 	addIngredientsToList(ingredients, units, groceryMap)
-	fmt.Println(groceryMap)
 
-	// if len(resp.Values) == 0 {
-	// 	fmt.Println("No data found.")
-	// } else {
-	// 	fmt.Println("Name, Major:")
-	// 	for _, row := range resp.Values {
-	// 		// Print columns A and E, which correspond to indices 0 and 4.
-	// 		fmt.Printf("%s; %s\n", row[1], row[6])
-	// 	}
-	// }
+	saveListToFile("groceryList.txt", groceryMap)
+
 }
