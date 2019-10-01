@@ -7,5 +7,6 @@ A program in Go that automatically generates a grocery list based on selected re
 - I also wanted to learn Go, so I decided to do this in Go, given that implementing this in python could have been orders of magnitude faster. 
 
 ## EXAMPLE 
+- I've completed a MVP of the system. Right now, it can generate lists as follows:
 
 [Example grocery list](https://github.com/julianbertini/autoList/blob/master/cmd/groceryList.txt)
