@@ -44,8 +44,8 @@ func getClient(config *oauth2.Config) *http.Client {
 	// time.
 
 	// DEBUGGING file path
-	// tokFile := "../configs/token.json"
-	tokFile := "configs/token.json"
+	tokFile := "../configs/token.json"
+	// tokFile := "configs/token.json"
 	tok, err := tokenFromFile(tokFile)
 	if err != nil {
 		tok = getTokenFromWeb(config)
@@ -105,17 +105,19 @@ type unitConversions struct {
 }
 
 func loadUnitConversions() *unitConversions {
-	f, err := os.Open("/internal/measurements.json")
+	// DEBUGGING
+	f, err := os.Open("../configs/measurements.json")
+	// f, err := os.Open("/configs/measurements.json")
 	if err != nil {
-		log.Fatalf("Unable to open measurements.json file.")
+		log.Fatalf("Unable to open measurements.json file. Error: %v", err)
 	}
 
 	defer f.Close()
 
 	unitConversions := &unitConversions{}
-	err = json.NewEncoder(f).Encode(unitConversions)
+	err = json.NewDecoder(f).Decode(unitConversions)
 	if err != nil {
-		log.Fatalf("Unable to enconde measurements.json file into struct.")
+		log.Fatalf("Unable to enconde measurements.json file into struct. Error: %v", err)
 	}
 	return unitConversions
 }
@@ -166,42 +168,47 @@ func convertUnit(fromQuant string, fromUnit string, toUnit string, units *unitCo
 
 func addIngredientsToList(ingredients []string, units *unitConversions, groceryMap map[string][]string) {
 
-	// ["Onion;1/cup(s)"]
-
+	var fromUnit string
+	var toUnit string
+	var fromQuantFloat float64
+	// ["Onion;1/cups"]
 	for _, ingredient := range ingredients {
-		newIngredientTokens := strings.Split(ingredient, MeasurementSep)
-		// ["Onion", "1/cup(s)"]
-		newIngredientName := newIngredientTokens[0]
-		// "Onion"
-		newIngredientMeasurment := newIngredientTokens[1]
-		// "1/cups"
-		newMeasurementTokens := strings.Split(newIngredientMeasurment, QuantitySep)
-		// ["1", "cups"]
-		fromQuant := newMeasurementTokens[0]
-		// "1"
-		fromUnit := newMeasurementTokens[1]
-		// "cups"
+		newIngredientTokens := strings.Split(ingredient, MeasurementSep)            // ["Onion", "1/cups"]
+		newIngredientName := newIngredientTokens[0]                                 // "Onion"
+		newIngredientMeasurment := newIngredientTokens[1]                           // "1/cups"
+		newMeasurementTokens := strings.Split(newIngredientMeasurment, QuantitySep) // ["1", "cups"]
+		fromQuant := newMeasurementTokens[0]                                        // "1"
+		fromQuantFloat, _ = strconv.ParseFloat(fromQuant, 64)
+		fromUnit = ""
+		toUnit = ""
 
-		// Okay, so now need to figure out how to do unit conversion if needed
-		// 1: Check if the ingredient is already in groveryMap. It is.
-		existingIngredient, ok := groceryMap[newIngredientName]
-		if ok {
-			//Get the unit of the existing ingredient.
-			toUnit := existingIngredient[1]
+		existingMeasurementTokens, ok := groceryMap[newIngredientName]
+
+		if len(newMeasurementTokens) > 1 && len(newMeasurementTokens[1]) > 0 {
+			fromUnit = newMeasurementTokens[1]
+		}
+		if len(existingMeasurementTokens) > 1 && len(existingMeasurementTokens[1]) > 0 {
+			toUnit = existingMeasurementTokens[1] // "cups"
+		}
+
+		if ok { // 1: Check if the ingredient is already in groveryMap. It is.
+			if len(fromUnit) > 0 && len(toUnit) > 0 && fromUnit != toUnit {
+				fromQuantFloat = convertUnit(fromQuant, fromUnit, toUnit, units)
+			}
+
 			//Convert the new ingredient into the unit of existing ingredient
-			convFromQuant := convertUnit(fromQuant, fromUnit, toUnit, units)
+
 			// Convert existing ingredient amount to float
-			toQuant, _ := strconv.ParseFloat(groceryMap[newIngredientName][1], 64)
+			toQuant, _ := strconv.ParseFloat(groceryMap[newIngredientName][0], 64)
 			// Add existing ingredient amount to new amount, and convert to str.
-			newQuant := strconv.FormatFloat(convFromQuant+toQuant, 'e', 2, 64)
+			newQuant := strconv.FormatFloat(fromQuantFloat+toQuant, 'f', 2, 64)
 			// Add new ingredient quantity to existing ingredient in list
-			groceryMap[newIngredientName][1] = newQuant
+			groceryMap[newIngredientName][0] = newQuant
 
 		} else { // 2: Check if the ingredient is already in groceryMap. It is not.
-			//		- Add the ingredient to the map
-			//		- Add the amount and the unit
-			//		- Done
-
+			// Add the ingredient and amount to the map
+			measurement := []string{fromQuant, fromUnit}
+			groceryMap[newIngredientName] = measurement
 		}
 	}
 }
@@ -262,8 +269,8 @@ func getHeaders(respValues [][]interface{}) map[string]map[string][2]int {
 func main() {
 
 	// DEBUGGING file path
-	// b, err := ioutil.ReadFile("../configs/credentials.json")
-	b, err := ioutil.ReadFile("configs/credentials.json")
+	b, err := ioutil.ReadFile("../configs/credentials.json")
+	// b, err := ioutil.ReadFile("configs/credentials.json")
 	if err != nil {
 		log.Fatalf("Unable to read client secret file: %v", err)
 	}
@@ -289,9 +296,16 @@ func main() {
 	}
 
 	// need to identify indices of headers
-
 	headersMap := getHeaders(resp.Values)
-	fmt.Println(headersMap)
+	// fmt.Println(headersMap)
+
+	groceryMap := make(map[string][]string)
+
+	ingredients := getIngredients(resp.Values, "1-M", headersMap)
+	units := loadUnitConversions()
+
+	addIngredientsToList(ingredients, units, groceryMap)
+	fmt.Println(groceryMap)
 
 	// if len(resp.Values) == 0 {
 	// 	fmt.Println("No data found.")
