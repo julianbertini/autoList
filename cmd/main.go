@@ -1,3 +1,4 @@
+// Copyright (c) 2019 Julian Bertini
 package main
 
 import (
