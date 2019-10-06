@@ -16,6 +16,27 @@ import (
 	"google.golang.org/api/sheets/v4"
 )
 
+type spreadsheetID struct {
+	RecipeSheetID string `json:"recipeSheetID"`
+}
+
+func GetRecipeSheetID(file string) spreadsheetID {
+	f, err := os.Open(file)
+	if err != nil {
+		log.Fatalf("\nError: Could not open recipe spreadsheet ID json file.\n\t%v", err)
+	}
+	defer f.Close()
+
+	spreadsheetCreds := spreadsheetID{}
+
+	err = json.NewDecoder(f).Decode(&spreadsheetCreds)
+	if err != nil {
+		log.Fatalf("\nError: Could not decode JSON file. \n\t%v", err)
+	}
+
+	return spreadsheetCreds
+}
+
 // Retrieve a token, saves the token, then returns the generated client.
 func getClient(config *oauth2.Config) *http.Client {
 	// The file token.json stores the user's access and refresh tokens, and is

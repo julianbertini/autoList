@@ -1,6 +1,7 @@
 ### Includes API tokens and secrets
 /configs/credentials.json
 /configs/token.json
+/configs/spreadsheetCreds.json
 
 ### Testing grocery list file
 cmd/testGroceryList.txt
