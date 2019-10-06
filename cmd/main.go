@@ -53,7 +53,7 @@ func main() {
 	// ################# BEGIN: Executes Once
 
 	// Initialize Google Sheets connection
-	spreadsheetID := sheetswrapper.GetRecipeSheetID("spreadsheetCreds.json").RecipeSheetID
+	spreadsheetID := sheetswrapper.GetRecipeSheetID().RecipeSheetID
 	readRange := "Recipes!A:Z"
 	service := sheetswrapper.GetService()
 	resp, err := service.Spreadsheets.Values.Get(spreadsheetID, readRange).Do()

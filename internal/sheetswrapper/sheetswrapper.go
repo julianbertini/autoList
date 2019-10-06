@@ -16,12 +16,14 @@ import (
 	"google.golang.org/api/sheets/v4"
 )
 
+const spreadsheetIDFilePath string = "../configs/spreadsheetCreds.json"
+
 type spreadsheetID struct {
 	RecipeSheetID string `json:"recipeSheetID"`
 }
 
-func GetRecipeSheetID(file string) spreadsheetID {
-	f, err := os.Open(file)
+func GetRecipeSheetID() spreadsheetID {
+	f, err := os.Open(spreadsheetIDFilePath)
 	if err != nil {
 		log.Fatalf("\nError: Could not open recipe spreadsheet ID json file.\n\t%v", err)
 	}
