@@ -8,5 +8,4 @@ A program in Go that automatically generates a grocery list based on selected re
 
 ## EXAMPLE 
 - I've completed a MVP of the system. Right now, it can generate lists as follows:
-
-[Example grocery list](https://github.com/julianbertini/autoList/blob/master/groceryList.txt)
+- [Example grocery list](https://github.com/julianbertini/autoList/blob/master/groceryList.txt)
