@@ -1,5 +1,11 @@
 // Copyright (c) 2019 Julian Bertini
 
+// TODO:
+//		- What happens when ingredient does not specify a measurement (missing amount and unit)?
+//		- Show selected recipe names on grocery list printout
+//		- Make ingredient processing case-agnostic (so upper/lower case doesn't make ingredients different)
+//		- When unit conversion cannot be made, add ingredient to list in diff. units
+
 package recipe
 
 import (
@@ -154,8 +160,8 @@ func GetIngredients(respValues [][]interface{}, recipeID string, headersMap map[
 	coords = headersMap[category][Ingredients]
 	coords[0] = coords[0] + recipeNum
 
-	if len(respValues) < coords[0] {
-		fmt.Printf("Warning: recipe with ID %s not found.\n", recipeID)
+	if len(respValues) < coords[0] || len(respValues[coords[0]]) < coords[1] {
+		fmt.Printf("Warning: recipe with ID %s not found or missing ingredients.\n", recipeID)
 		return strings.Split(ingredients, "")
 	}
 
