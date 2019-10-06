@@ -63,6 +63,7 @@ func main() {
 	}
 
 	// Initialize unit converter, headersMap, and groceryMap
+	var recipeNames []string
 	units := recipe.LoadUnitConversions()
 	headersMap := recipe.GetHeaders(resp.Values)
 	groceryMap := make(map[string][]string)
@@ -73,6 +74,8 @@ func main() {
 	// ################# END
 
 	// Generates ingredient list from provided IDs
+
+	recipeNames = recipe.GetRecipeNames(resp.Values, rl, headersMap)
 
 	for _, id := range rl {
 		// Get ingredients for specified recipe ID
@@ -86,7 +89,7 @@ func main() {
 
 	if len(groceryMap) > 0 {
 		// Save in-memory grocery list to .txt file
-		recipe.SaveListToFile("testGroceryList.txt", groceryMap)
+		recipe.SaveListToFile("testGroceryList.txt", groceryMap, recipeNames)
 	}
 
 }

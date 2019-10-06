@@ -30,6 +30,9 @@ const IngredientSep string = ","
 // Ingredients name of ingredients column
 const Ingredients string = "Ingredients"
 
+// Recipe Name: name of Recipe Name column
+const RecipeName string = "Recipe Name"
+
 // IDprefix ID- which predeces every ID number
 const IDprefix string = "ID-"
 
@@ -49,13 +52,21 @@ type unitConversions struct {
 }
 
 func writeHeader(f *os.File) {
-	header := "===============================\n"
-	header += "\tGrocery List\n"
-	header += "===============================\n"
+	header := "\n<<<<< Grocery List >>>>>\n"
+	header += "------------------------\n"
 	f.WriteString(header)
 }
 
-func SaveListToFile(path string, groceryMap map[string][]string) {
+func writeRecipeNames(f *os.File, recipeNames []string) {
+	recipes := "\n<<<<< Recipe Names >>>>>\n"
+	recipes += "------------------------\n"
+	for _, name := range recipeNames {
+		recipes += " - " + name + "\n"
+	}
+	f.WriteString(recipes)
+}
+
+func SaveListToFile(path string, groceryMap map[string][]string, recipeNames []string) {
 	fmt.Printf("Saving grocery list to file: %s\n", path)
 	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
@@ -75,6 +86,8 @@ func SaveListToFile(path string, groceryMap map[string][]string) {
 			log.Fatalf("Error writing ingredients to .txt file: %v", err)
 		}
 	}
+	writeRecipeNames(f, recipeNames)
+
 	fmt.Printf("Done!\n")
 }
 
@@ -100,15 +113,25 @@ func AddIngredientsToList(ingredients []string, units *unitConversions, groceryM
 
 	var fromUnit string
 	var toUnit string
-	var fromQuantFloat float64
+
 	// ["Onion;1/cups"]
 	for _, ingredient := range ingredients {
-		newIngredientTokens := strings.Split(ingredient, MeasurementSep)            // ["Onion", "1/cups"]
+		newIngredientTokens := strings.Split(ingredient, MeasurementSep) // ["Onion", "1/cups"]
+
+		if len(newIngredientTokens) != 2 {
+			log.Fatalf("\nUnexpected symbol encountered while parsing ingredient: %s.\n\t Expected ';' symbol to separate ingredient and measurement.", ingredient)
+		}
+
 		newIngredientName := strings.TrimSpace(newIngredientTokens[0])              // "Onion"
 		newIngredientMeasurment := strings.TrimSpace(newIngredientTokens[1])        // "1/cups"
 		newMeasurementTokens := strings.Split(newIngredientMeasurment, QuantitySep) // ["1", "cups"]
 		fromQuant := strings.TrimSpace(newMeasurementTokens[0])                     // "1"
-		fromQuantFloat, _ = strconv.ParseFloat(fromQuant, 64)
+		fromQuantFloat, err := strconv.ParseFloat(fromQuant, 64)
+
+		if err != nil {
+			log.Fatalf("\nError:\n* Unexpected token encountered while parsing ingredient: %s.\n* Expected numeric quantity only, or amount and units separated by '/' symbol.\n* Message: %v", ingredient, err)
+		}
+
 		fromUnit = ""
 		toUnit = ""
 
@@ -160,7 +183,7 @@ func GetIngredients(respValues [][]interface{}, recipeID string, headersMap map[
 	coords = headersMap[category][Ingredients]
 	coords[0] = coords[0] + recipeNum
 
-	if len(respValues) < coords[0] || len(respValues[coords[0]]) < coords[1] {
+	if len(respValues) <= coords[0] || len(respValues[coords[0]]) <= coords[1] {
 		fmt.Printf("Warning: recipe with ID %s not found or missing ingredients.\n", recipeID)
 		return strings.Split(ingredients, "")
 	}
@@ -168,6 +191,35 @@ func GetIngredients(respValues [][]interface{}, recipeID string, headersMap map[
 	ingredients = respValues[coords[0]][coords[1]].(string)
 
 	return strings.Split(ingredients, IngredientSep)
+}
+
+func GetRecipeNames(respValues [][]interface{}, rl []string, headers map[string]map[string][2]int) []string {
+	var recipeNames []string
+	var category string
+	var coords [2]int
+
+	for _, id := range rl {
+
+		recipeNum, err := strconv.Atoi(strings.Split(id, IDsep)[0])
+
+		if err != nil {
+			log.Fatalf("\nError: Recipe ID provided is not valid. \n\t ID must be in the form of [integer]-[letter].")
+		}
+
+		category = strings.Split(id, IDsep)[1]
+
+		coords = headers[category][RecipeName]
+		coords[0] = coords[0] + recipeNum
+
+		if len(respValues) <= coords[0] || len(respValues[coords[0]]) <= coords[1] {
+			fmt.Printf("Warning: recipe with ID %s not found or missing Recipe Name.\n", id)
+		} else {
+			recipeNames = append(recipeNames, respValues[coords[0]][coords[1]].(string))
+		}
+
+	}
+
+	return recipeNames
 }
 
 func GetHeaders(respValues [][]interface{}) map[string]map[string][2]int {
