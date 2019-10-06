@@ -2,5 +2,8 @@
 /configs/credentials.json
 /configs/token.json
 
+### Testing grocery list file
+/cmd/groceryList.txt
+
 ### VSCode configs file
 .vscode
