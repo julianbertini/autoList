@@ -3,7 +3,7 @@
 /configs/token.json
 
 ### Testing grocery list file
-/cmd/groceryList.txt
+cmd/testGroceryList.txt
 
 ### VSCode configs file
 .vscode
