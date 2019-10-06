@@ -86,7 +86,7 @@ func main() {
 
 	if len(groceryMap) > 0 {
 		// Save in-memory grocery list to .txt file
-		recipe.SaveListToFile("groceryList.txt", groceryMap)
+		recipe.SaveListToFile("testGroceryList.txt", groceryMap)
 	}
 
 }

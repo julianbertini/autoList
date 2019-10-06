@@ -1,7 +1,0 @@
-===============================
-	Grocery List
-===============================
- # Chilli Powder --> [2 tbsp]
- # Onion --> [4 ]
- # Tumeric --> [4 tsp]
- # Chicken Broth --> [10 floz]
