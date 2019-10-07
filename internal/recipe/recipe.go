@@ -10,6 +10,7 @@ package recipe
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"math"
@@ -78,9 +79,17 @@ func SaveListToFile(path string, groceryMap map[string][]string, recipeNames []s
 	writeHeader(f)
 	// Here we write contents of groceryMap
 	for ingredient, measurement := range groceryMap {
-		amount := measurement[0]
-		unit := measurement[1]
-		ingredientLine := " # " + ingredient + " --> " + "[" + amount + " " + unit + "]" + "\n"
+
+		ingredientLine := " # " + ingredient + " --> " + "["
+		for i, measurementToken := range measurement {
+			if i > 0 && i%2 == 0 {
+				ingredientLine += ", " + measurementToken
+			} else {
+				ingredientLine += " " + measurementToken
+			}
+		}
+		ingredientLine += "]" + "\n"
+
 		_, err = f.WriteString(ingredientLine)
 		if err != nil {
 			log.Fatalf("Error writing ingredients to .txt file: %v", err)
@@ -97,6 +106,7 @@ func LoadUnitConversions() *unitConversions {
 	f, err := os.Open("../configs/measurements.json")
 	if err != nil {
 		log.Fatalf("Unable to open measurements.json file. Error: %v", err)
+
 	}
 
 	defer f.Close()
@@ -112,7 +122,9 @@ func LoadUnitConversions() *unitConversions {
 func AddIngredientsToList(ingredients []string, units *unitConversions, groceryMap map[string][]string) {
 
 	var fromUnit string
-	var toUnit string
+	var foundUnitIdx int = 0
+	var toPossibleUnits []string
+	var convertErr error
 
 	// ["Onion;1/cups"]
 	for _, ingredient := range ingredients {
@@ -133,7 +145,6 @@ func AddIngredientsToList(ingredients []string, units *unitConversions, groceryM
 		}
 
 		fromUnit = ""
-		toUnit = ""
 
 		existingMeasurementTokens, ok := groceryMap[newIngredientName]
 
@@ -141,22 +152,46 @@ func AddIngredientsToList(ingredients []string, units *unitConversions, groceryM
 			fromUnit = strings.TrimSpace(newMeasurementTokens[1])
 		}
 		if len(existingMeasurementTokens) > 1 && len(existingMeasurementTokens[1]) > 0 {
-			toUnit = strings.TrimSpace(existingMeasurementTokens[1]) // "cups"
+			for i := range existingMeasurementTokens {
+				if (i+1)%2 == 0 { // only even elements correspond to units, others are quantities
+					toPossibleUnits = append(toPossibleUnits, existingMeasurementTokens[i]) // "[cups, lb, ...]"
+				}
+			}
 		}
 
 		if ok { // 1: Check if the ingredient is already in groveryMap. It is.
-			if len(fromUnit) > 0 && len(toUnit) > 0 && fromUnit != toUnit {
-				fromQuantFloat = convertUnit(fromQuant, fromUnit, toUnit, units)
+
+			// If there are from units and possible to units to convert to or add on to
+			if (len(fromUnit) > 0 && len(toPossibleUnits) > 0) || (len(fromUnit) == 0 && len(toPossibleUnits) == 0) {
+
+				if len(fromUnit) > 0 && len(toPossibleUnits) > 0 {
+					foundUnit := false
+					for i, unit := range toPossibleUnits {
+						if fromUnit == unit {
+							foundUnit = true
+							foundUnitIdx = i
+							break
+						}
+					}
+					if !foundUnit {
+						fromQuantFloat, convertErr = convertUnit(fromQuant, fromUnit, toPossibleUnits, units)
+						if convertErr != nil {
+							fmt.Printf("Warning: %v\n", convertErr)
+							groceryMap[newIngredientName] = append(groceryMap[newIngredientName], fromQuant, fromUnit)
+							return
+						}
+					}
+				}
+				// Convert existing ingredient amount to float
+				toQuant, _ := strconv.ParseFloat(groceryMap[newIngredientName][foundUnitIdx], 64)
+				// Add existing ingredient amount to new amount, and convert to str.
+				newQuant := strconv.FormatInt(int64(math.Round(fromQuantFloat+toQuant)), 10)
+				// Add new ingredient quantity to existing ingredient in list
+				groceryMap[newIngredientName][foundUnitIdx] = newQuant
+
+			} else {
+				groceryMap[newIngredientName] = append(groceryMap[newIngredientName], fromQuant, fromUnit)
 			}
-
-			//Convert the new ingredient into the unit of existing ingredient
-
-			// Convert existing ingredient amount to float
-			toQuant, _ := strconv.ParseFloat(groceryMap[newIngredientName][0], 64)
-			// Add existing ingredient amount to new amount, and convert to str.
-			newQuant := strconv.FormatInt(int64(math.Round(fromQuantFloat+toQuant)), 10)
-			// Add new ingredient quantity to existing ingredient in list
-			groceryMap[newIngredientName][0] = newQuant
 
 		} else { // 2: Check if the ingredient is already in groceryMap. It is not.
 			// Add the ingredient and amount to the map
@@ -254,46 +289,70 @@ func GetHeaders(respValues [][]interface{}) map[string]map[string][2]int {
 	return headersMap
 }
 
-func convertUnit(fromQuant string, fromUnit string, toUnit string, units *unitConversions) float64 {
+func convertUnit(fromQuant string, fromUnit string, toUnits []string, units *unitConversions) (float64, error) {
 
-	var newQuant float64
+	var newQuant float64 = 0
+	var err error = nil
 	floatQuant, _ := strconv.ParseFloat(fromQuant, 32)
 
 	switch fromUnit {
 	case "tsp":
-		if _, ok := units.Tsp[toUnit]; !ok {
-			log.Fatalf("Unit conversion not found from " + fromUnit + " to " + toUnit)
+		for _, toUnit := range toUnits {
+			if _, ok := units.Tsp[toUnit]; ok {
+				newQuant = floatQuant * units.Tsp[toUnit]
+			}
 		}
-		newQuant = floatQuant * units.Tsp[toUnit]
+		if newQuant == 0 {
+			err = errors.New("Unit conversion not found from " + fromUnit + "to" + strings.Join(toUnits, ",") + ".")
+		}
 	case "tbsp":
-		if _, ok := units.Tbsp[toUnit]; !ok {
-			log.Fatalf("Unit conversion not found from " + fromUnit + " to " + toUnit)
+		for _, toUnit := range toUnits {
+			if _, ok := units.Tbsp[toUnit]; ok {
+				newQuant = floatQuant * units.Tbsp[toUnit]
+			}
 		}
-		newQuant = floatQuant * units.Tbsp[toUnit]
+		if newQuant == 0 {
+			err = errors.New("Unit conversion not found from " + fromUnit + "to" + strings.Join(toUnits, ",") + ".")
+		}
 	case "lb":
-		if _, ok := units.Lb[toUnit]; !ok {
-			log.Fatalf("Unit conversion not found from " + fromUnit + " to " + toUnit)
+		for _, toUnit := range toUnits {
+			if _, ok := units.Lb[toUnit]; ok {
+				newQuant = floatQuant * units.Lb[toUnit]
+			}
 		}
-		newQuant = floatQuant * units.Lb[toUnit]
+		if newQuant == 0 {
+			err = errors.New("Unit conversion not found from " + fromUnit + "to" + strings.Join(toUnits, ",") + ".")
+		}
 	case "oz":
-		if _, ok := units.Oz[toUnit]; !ok {
-			log.Fatalf("Unit conversion not found from " + fromUnit + " to " + toUnit)
+		for _, toUnit := range toUnits {
+			if _, ok := units.Oz[toUnit]; ok {
+				newQuant = floatQuant * units.Oz[toUnit]
+			}
 		}
-		newQuant = floatQuant * units.Oz[toUnit]
+		if newQuant == 0 {
+			err = errors.New("Unit conversion not found from " + fromUnit + "to" + strings.Join(toUnits, ",") + ".")
+		}
 	case "floz":
-		if _, ok := units.Floz[toUnit]; !ok {
-			log.Fatalf("Unit conversion not found from " + fromUnit + " to " + toUnit)
+		for _, toUnit := range toUnits {
+			if _, ok := units.Floz[toUnit]; ok {
+				newQuant = floatQuant * units.Floz[toUnit]
+			}
 		}
-		newQuant = floatQuant * units.Floz[toUnit]
+		if newQuant == 0 {
+			err = errors.New("Unit conversion not found from " + fromUnit + "to" + strings.Join(toUnits, ",") + ".")
+		}
 	case "cups":
-		if _, ok := units.Cups[toUnit]; !ok {
-			log.Fatalf("Unit conversion not found from " + fromUnit + " to " + toUnit)
+		for _, toUnit := range toUnits {
+			if _, ok := units.Cups[toUnit]; ok {
+				newQuant = floatQuant * units.Cups[toUnit]
+			}
 		}
-		newQuant = floatQuant * units.Cups[toUnit]
+		if newQuant == 0 {
+			err = errors.New("Unit conversion not found from " + fromUnit + "to" + strings.Join(toUnits, ",") + ".")
+		}
 	default:
-		log.Fatalf("From unit: " + fromUnit + " is not currently supported.")
+		err = errors.New("Unit conversion from " + fromUnit + " not supported.")
 	}
 
-	return newQuant
-
+	return newQuant, err
 }
